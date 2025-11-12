@@ -181,12 +181,11 @@ function Header({ tab = "student", setTab = () => {}, studentSubTab = "postings"
     <header className="sticky top-0 z-10 bg-white" style={{ borderBottom: `3px solid ${PRIMARY}` }}>
       <div className="w-full flex items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
-          {/* Replace with <img src="/mcmaster-logo.png" /> when available */}
-          <div className="h-10 w-10 rounded bg-gray-200 grid place-items-center text-xs">Logo</div>
-          <div>
-            <h1 className="text-xl font-semibold" style={{ color: PRIMARY }}>CAS Department</h1>
-            <div className="text-sm text-gray-600">TA Application Portal (Prototype)</div>
-          </div>
+          <img src="/mcmaster-logo.png" alt="McMaster University" className="h-10 w-auto" />
+            <div>
+              <h1 className="text-xl font-semibold" style={{ color: PRIMARY }}>CAS Department</h1>
+              <div className="text-sm text-gray-600">TA Application Portal (Prototype)</div>
+            </div>
         </div>
         <div className="flex items-center gap-2">
           <button
