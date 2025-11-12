@@ -71,3 +71,8 @@ export default defineConfig([
   },
 ])
 ```
+
+node -v     # should be >= 20
+npm -v
+npm install
+npm run dev
