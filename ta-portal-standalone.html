@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CAS Department · TA Application Portal (Standalone Preview)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind via CDN (runtime) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root{--primary:#7A003C}
+    html,body{height:100%;width:100%} body{margin:0;background:#F9FAFB}
+    .chip{font-size:.75rem;font-weight:600;padding:.25rem .5rem;border-radius:9999px}
+  </style>
+</head>
+<body>
+  <header class="sticky top-0 z-10 bg-white border-b" style="border-bottom-color:var(--primary);border-bottom-width:3px">
+    <div class="w-full flex items-center justify-between px-6 py-3">
+      <div class="flex items-center gap-3">
+        <!-- 你也可以把 src 换成本地图片路径 -->
+        <img src="https://upload.wikimedia.org/wikipedia/en/thumb/5/5f/McMaster_University_Coat_of_Arms.svg/120px-McMaster_University_Coat_of_Arms.svg.png"
+             alt="McMaster" class="h-10 w-auto" />
+        <div>
+          <h1 class="text-xl font-semibold" style="color:var(--primary)">CAS Department</h1>
+          <div class="text-sm text-gray-600">TA Application Portal (Prototype)</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btnStudent" class="px-3 py-1.5 rounded-lg text-sm border" style="border-color:var(--primary);color:var(--primary)">Student</button>
+        <button id="btnProfessor" class="px-3 py-1.5 rounded-lg text-sm border" style="background:var(--primary);color:#fff;border-color:var(--primary)">Professor</button>
+        <button id="btnReset" class="px-3 py-1.5 rounded-lg text-sm border" style="border-color:var(--primary);color:var(--primary)">Reset Portal</button>
+      </div>
+    </div>
+    <div id="studentSubnav" class="w-full px-6 pb-2 hidden gap-2">
+      <button id="btnPostings" class="px-3 py-1 rounded-md text-sm border" style="background:var(--primary);color:#fff;border-color:var(--primary)">Postings</button>
+      <button id="btnAccount"  class="px-3 py-1 rounded-md text-sm border" style="border-color:var(--primary);color:var(--primary)">My Account</button>
+    </div>
+  </header>
+
+  <main id="app" class="w-full px-8 py-6"></main>
+
+  <!-- Modal -->
+  <div id="modalBackdrop" class="fixed inset-0 bg-black/40 hidden"></div>
+  <div id="modal" class="fixed inset-0 hidden place-items-center p-4">
+    <div class="relative w-full max-w-2xl rounded-2xl bg-white p-4 shadow-2xl border" style="border-color:var(--primary)">
+      <button id="modalClose" class="absolute top-2 right-2 border rounded-lg px-2 py-1 text-xs" style="border-color:var(--primary);color:var(--primary)">Close</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Mock data =====
+    const PRIMARY = getComputedStyle(document.documentElement).getPropertyValue('--primary') || '#7A003C';
+    const POSTINGS = [
+      { id:"SFWRENG-2HC3-W25", code:"2HC3", title:"SFWRENG 2HC3 – Human-Computer Interfaces", professor:"Dr. Yuan",
+        studentPrevGrade:"A", classTime:"Mon 14:30–16:20 (ITB 137)",
+        tutorialSlots:[{day:"Tue",start:"10:30",end:"11:20"},{day:"Thu",start:"09:30",end:"10:20"}] },
+      { id:"SFWRENG-2AA4-W25", code:"2AA4", title:"SFWRENG 2AA4 – Software Abstraction & Specification", professor:"Dr. Smith",
+        studentPrevGrade:"A-", classTime:"Tue 10:30–12:20 (ITB 201)",
+        tutorialSlots:[{day:"Wed",start:"15:30",end:"16:20"},{day:"Fri",start:"11:30",end:"12:20"}] },
+    ];
+    const STUDENT_CLASSES = [
+      { day:"Mon",start:"12:30",end:"13:20" }, { day:"Tue",start:"09:30",end:"10:20" },
+      { day:"Wed",start:"14:30",end:"15:20" }, { day:"Thu",start:"13:30",end:"14:20" },
+    ];
+
+    // ===== State + storage =====
+    const S = {
+      tab: 'student', subTab: 'postings', profPostingId: POSTINGS[0].id,
+      applications: JSON.parse(localStorage.getItem('apps')||'[]'),
+    };
+    const saveApps = ()=>localStorage.setItem('apps', JSON.stringify(S.applications));
+    const reset = ()=>{ localStorage.clear(); location.reload(); };
+    const cryptoId = ()=>Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+
+    // ===== Rendering helpers =====
+    const app = document.getElementById('app');
+    const showStudentNav = (show)=>document.getElementById('studentSubnav').classList.toggle('hidden', !show);
+    const setTabButtons = ()=>{
+      const sBtn = document.getElementById('btnStudent'), pBtn = document.getElementById('btnProfessor');
+      if(S.tab==='student'){ sBtn.style.background=PRIMARY; sBtn.style.color='#fff'; pBtn.style.background=''; pBtn.style.color=PRIMARY; }
+      else{ pBtn.style.background=PRIMARY; pBtn.style.color='#fff'; sBtn.style.background=''; sBtn.style.color=PRIMARY; }
+    };
+    const setSubnavButtons = ()=>{
+      const p = document.getElementById('btnPostings'), a = document.getElementById('btnAccount');
+      if(S.subTab==='postings'){ p.style.background=PRIMARY; p.style.color='#fff'; a.style.background=''; a.style.color=PRIMARY; }
+      else{ a.style.background=PRIMARY; a.style.color='#fff'; p.style.background=''; p.style.color=PRIMARY; }
+    };
+
+    function render() {
+      setTabButtons();
+      showStudentNav(S.tab==='student');
+      setSubnavButtons();
+
+      if (S.tab === 'student' && S.subTab === 'postings') return renderStudentPostings();
+      if (S.tab === 'student' && S.subTab === 'account')  return renderStudentAccount();
+      return renderProfessor();
+    }
+
+    // ===== Student: Postings =====
+    function renderStudentPostings(){
+      app.innerHTML = `
+        <section class="grid gap-3">
+          <h2 class="text-lg font-semibold" style="color:${PRIMARY}">Browse TA Postings</h2>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 border rounded-xl bg-white px-3 py-2 w-full max-w-xl" style="border-color:${PRIMARY}">
+              <input id="search" placeholder="Search by code, title, professor…" class="w-full outline-none text-sm" />
+            </div>
+            <button class="border rounded-xl px-3 py-2 text-sm" style="border-color:${PRIMARY};color:${PRIMARY}">Filters</button>
+          </div>
+          <div id="cards" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </section>`;
+      const cards = document.getElementById('cards');
+      const draw = (list)=>{
+        cards.innerHTML = list.map(p=>`
+          <div class="rounded-2xl border bg-white p-4">
+            <div class="font-semibold">${p.title}</div>
+            <dl class="mt-2 text-sm text-gray-700 space-y-1">
+              <div><span class="font-medium">Professor:</span> ${p.professor}</div>
+              <div><span class="font-medium">Your previous grade:</span> ${p.studentPrevGrade}</div>
+              <div><span class="font-medium">Class time:</span> ${p.classTime}</div>
+            </dl>
+            <button data-id="${p.id}" class="open mt-3 w-full rounded-xl px-3 py-2 text-sm font-medium text-white" style="background:${PRIMARY}">View details</button>
+          </div>`).join('');
+        [...cards.querySelectorAll('.open')].forEach(b=>b.onclick=()=>openPosting(b.dataset.id));
+      };
+      draw(POSTINGS);
+      document.getElementById('search').oninput = (e)=>{
+        const q = e.target.value.trim().toLowerCase();
+        const list = POSTINGS.filter(p=>[p.code,p.title,p.professor].some(x=>x.toLowerCase().includes(q)));
+        draw(list);
+      };
+    }
+
+    // ===== Student: Account =====
+    function renderStudentAccount(){
+      app.innerHTML = `
+        <section class="grid gap-3">
+          <h2 class="text-lg font-semibold" style="color:${PRIMARY}">My Applications</h2>
+          ${S.applications.length===0 ? `
+            <div class="rounded-2xl border bg-white p-8 text-center">
+              <div class="font-medium" style="color:${PRIMARY}">No applications yet</div>
+              <div class="text-sm text-gray-600">Apply from the Postings tab.</div>
+            </div>` :
+            `<div class="grid gap-3">${
+              S.applications.map(a=>`
+                <div class="rounded-2xl border bg-white p-4">
+                  <div class="font-medium" style="color:${PRIMARY}">${a.course}</div>
+                  <div class="text-sm text-gray-600">${a.postingId} • ${new Date(a.createdAt).toLocaleString()}</div>
+                  <div class="mt-2 flex items-center gap-2">
+                    ${statusChip(a.status)}
+                    ${a.nextStep ? `<span class="text-xs text-gray-700">Next step: <span class="font-semibold">${a.nextStep}</span></span>`:''}
+                  </div>
+                </div>`).join('')
+            }</div>`
+          }
+        </section>`;
+    }
+
+    // ===== Professor =====
+    function renderProfessor(){
+      const course = POSTINGS.find(p=>p.id===S.profPostingId) || POSTINGS[0];
+      const apps = S.applications.filter(a=>a.postingId===course.id);
+      app.innerHTML = `
+        <div class="grid gap-6">
+          <section class="rounded-2xl border bg-white p-4">
+            <div class="flex items-center gap-2 text-sm font-medium" style="color:${PRIMARY}">
+              Logged in as: <span class="font-semibold">${course.professor}</span> (Course: ${course.code})
+            </div>
+            <div class="mt-2">
+              <label class="text-sm text-gray-700">Switch Professor Account (one course per account)</label>
+              <select id="profSelect" class="mt-1 border rounded-lg px-3 py-2 text-sm" style="border-color:${PRIMARY}">
+                ${POSTINGS.map(p=>`<option value="${p.id}" ${p.id===course.id?'selected':''}>${p.professor} — ${p.code}</option>`).join('')}
+              </select>
+            </div>
+          </section>
+
+          <section class="grid gap-3">
+            <h2 class="text-lg font-semibold" style="color:${PRIMARY}">Applications – ${course.title}</h2>
+            <div class="rounded-2xl border bg-white p-4">
+              ${apps.length===0 ? `<div class="text-sm text-gray-600 mt-2">No applicants yet.</div>` :
+                `<div class="mt-3 grid gap-2">
+                  ${apps.map(a=>`
+                    <div class="rounded-xl border px-3 py-2 bg-slate-50 flex items-center justify-between">
+                      <div class="text-sm">
+                        <div class="font-medium">Applicant #${a.id.slice(-5)}</div>
+                        <div class="text-gray-600">${a.course}</div>
+                        <div class="mt-1">${statusChip(a.status)}</div>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <button data-id="${a.id}" class="openApp border rounded-lg px-3 py-1.5 text-sm" style="border-color:${PRIMARY};color:${PRIMARY}">Open</button>
+                      </div>
+                    </div>`).join('')}
+                </div>`}
+            </div>
+          </section>
+        </div>`;
+      document.getElementById('profSelect').onchange = e => { S.profPostingId = e.target.value; render(); };
+      [...document.querySelectorAll('.openApp')].forEach(b=>b.onclick=()=>openApplication(b.dataset.id));
+    }
+
+    // ===== UI Pieces =====
+    function statusChip(status){
+      const map = {
+        submitted:{bg:"#FBE6F0",fg:PRIMARY,label:"Submitted"},
+        reviewed:{bg:"#FFEB99",fg:PRIMARY,label:"Reviewed"},
+        interview:{bg:"#E9F5FF",fg:"#0C4A6E",label:"Interview"},
+        accepted:{bg:"#E8F5E9",fg:"#1B5E20",label:"Accepted"},
+        rejected:{bg:"#FDE7EA",fg:PRIMARY,label:"Rejected"},
+      }[status] || {bg:"#EEE",fg:"#555",label:status};
+      return `<span class="chip" style="background:${map.bg};color:${map.fg}">${map.label}</span>`;
+    }
+
+    function openPosting(id){
+      const p = POSTINGS.find(x=>x.id===id);
+      const days = ["Mon","Tue","Wed","Thu","Fri"];
+      const hasConflict = (slot)=>STUDENT_CLASSES.some(c=>c.day===slot.day && !(slot.end<=c.start || slot.start>=c.end));
+      const grid = days.map(d=>{
+        const slot = p.tutorialSlots.find(s=>s.day===d);
+        if(!slot) return `<div class="h-16 rounded-md bg-gray-100"></div>`;
+        const conflict = hasConflict(slot);
+        return `<div class="h-16 rounded-md flex items-center justify-center" style="background:${conflict?'#FDE7EA':'#E8F5E9'};color:${conflict?PRIMARY:'#1B5E20'}">${slot.start}–${slot.end}</div>`;
+      }).join('');
+
+      document.getElementById('modalContent').innerHTML = `
+        <div class="w-full max-w-2xl">
+          <div class="text-lg font-semibold" style="color:${PRIMARY}">${p.title}</div>
+          <div class="text-sm text-gray-600">${p.code} • ${p.professor}</div>
+          <div class="mt-1 text-sm"><span class="font-medium">Your previous grade:</span> ${p.studentPrevGrade}</div>
+
+          <div class="grid md:grid-cols-2 gap-4 mt-3">
+            <div class="rounded-xl border bg-white p-3">
+              <div class="font-medium">Class Time</div>
+              <div class="text-sm mt-1">${p.classTime}</div>
+              <div class="font-medium mt-3">Possible TA Tutorial Times</div>
+              <ul class="list-disc pl-5 text-sm mt-1 space-y-0.5">
+                ${p.tutorialSlots.map(t=>`<li>${t.day} ${t.start}–${t.end}</li>`).join('')}
+              </ul>
+            </div>
+            <div class="rounded-xl border bg-white p-3">
+              <div class="font-medium">Schedule Preview</div>
+              <div class="text-xs mt-1">
+                <div class="grid grid-cols-5 gap-1">${["Mon","Tue","Wed","Thu","Fri"].map(d=>`<div class="text-center font-medium text-gray-700">${d}</div>`).join('')}</div>
+                <div class="grid grid-cols-5 gap-1 mt-1">${grid}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border bg-white p-3 mt-3 grid gap-3">
+            <label class="text-sm font-medium">Upload Resume (PDF) <span class="text-gray-500">(optional)</span></label>
+            <input id="upResume" type="file" accept=".pdf,application/pdf" class="text-sm"/>
+
+            <label class="text-sm font-medium">Upload Transcript (PDF) <span class="text-gray-500">(optional)</span></label>
+            <input id="upTranscript" type="file" accept=".pdf,application/pdf" class="text-sm"/>
+          </div>
+
+          <div class="rounded-xl border bg-white p-3 mt-3 grid gap-2">
+            <label class="text-sm font-medium">Optional note to professor</label>
+            <textarea id="note" rows="3" class="border rounded-xl px-3 py-2 text-sm"></textarea>
+          </div>
+
+          <div class="mt-3">
+            <button id="btnApply" class="border rounded-xl px-4 py-2 text-sm" style="border-color:${PRIMARY};color:${PRIMARY}">Submit Application</button>
+          </div>
+        </div>`;
+      openModal();
+
+      document.getElementById('btnApply').onclick = ()=>{
+        const resume = document.getElementById('upResume').files[0] || null;
+        const transcript = document.getElementById('upTranscript').files[0] || null;
+        if (resume && !/\.pdf$/i.test(resume.name)) return alert('Resume must be PDF if provided');
+        if (transcript && !/\.pdf$/i.test(transcript.name)) return alert('Transcript must be PDF if provided');
+
+        const app = {
+          id: cryptoId(), postingId: p.id, course: p.title, status: 'submitted',
+          resumeName: resume?.name || null, transcriptName: transcript?.name || null,
+          createdAt: Date.now()
+        };
+        S.applications = [app, ...S.applications];
+        saveApps();
+        closeModal();
+        alert(`Application submitted for ${p.code}.`);
+      };
+    }
+
+    function openApplication(appId){
+      const a = S.applications.find(x=>x.id===appId);
+      document.getElementById('modalContent').innerHTML = `
+        <div class="w-full max-w-xl">
+          <div class="text-lg font-semibold" style="color:${PRIMARY}">Application – ${a.course}</div>
+          <div class="text-sm text-gray-600">ID: ${a.id}</div>
+          <div class="rounded-xl border bg-white p-3 mt-3">
+            <div class="font-medium">Uploaded Files</div>
+            <ul class="list-disc pl-5 text-sm mt-1 space-y-1">
+              <li>Resume: ${a.resumeName || 'N/A'}</li>
+              <li>Transcript: ${a.transcriptName || 'N/A'}</li>
+            </ul>
+          </div>
+          <div class="mt-4 flex items-center gap-2">
+            <button id="btnReviewed" class="border rounded-xl px-4 py-2 text-sm" style="border-color:${PRIMARY};color:${PRIMARY}">Mark Reviewed</button>
+          </div>
+        </div>`;
+      openModal();
+      document.getElementById('btnReviewed').onclick = ()=>{
+        S.applications = S.applications.map(x=>x.id===a.id?{...x,status:'reviewed'}:x);
+        saveApps(); closeModal(); render(); alert('Application marked Reviewed.');
+      };
+    }
+
+    // ===== Modal helpers =====
+    const modal = document.getElementById('modal');
+    const backdrop = document.getElementById('modalBackdrop');
+    function openModal(){ modal.classList.remove('hidden'); modal.style.display='grid'; backdrop.classList.remove('hidden'); }
+    function closeModal(){ modal.classList.add('hidden'); modal.style.display='none'; backdrop.classList.add('hidden'); }
+    document.getElementById('modalClose').onclick = closeModal;
+    backdrop.onclick = closeModal;
+    window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
+
+    // ===== Header actions =====
+    document.getElementById('btnStudent').onclick = ()=>{ S.tab='student'; S.subTab='postings'; render(); };
+    document.getElementById('btnProfessor').onclick = ()=>{ S.tab='professor'; render(); };
+    document.getElementById('btnReset').onclick = reset;
+    document.getElementById('btnPostings').onclick = ()=>{ S.subTab='postings'; render(); };
+    document.getElementById('btnAccount').onclick  = ()=>{ S.subTab='account'; render(); };
+
+    // init
+    render();
+  </script>
+</body>
+</html>
